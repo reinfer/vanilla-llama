@@ -16,7 +16,7 @@ print(llama.generate(["My name is Federico"]))
 ## Features
 
 - Easy to use and fine-tune 🔥
-- Uses (🤗 accelerate)[https://github.com/huggingface/accelerate] to distribute the model on all available GPUs
+- Uses [🤗 accelerate](https://github.com/huggingface/accelerate) to distribute the model on all available GPUs
 - Comes with batteries included🔋
 - Nice one line loading and generation 😎
 
