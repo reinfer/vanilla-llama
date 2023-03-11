@@ -10,9 +10,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     start_loading = time.time()
-    llama = LLaMAInference(args.llama_path, args.model)
+    llama = LLaMAInference(args.llama_path, args.model, max_batch_size=2)
     print(f"Loaded model {args.model} in {time.time() - start_loading:.2f} seconds")
 
     start_generation = time.time()
-    print(llama.generate(["My name is Federico"]))
+    print(llama.generate(["Chat:\nHuman: Hi i am an human\nAI:"], stop_ids=[13]))
     print(f"Inference took {time.time() - start_generation:.2f} seconds")
