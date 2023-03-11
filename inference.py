@@ -8,7 +8,7 @@ import os
 from llama import ModelArgs, Tokenizer, Transformer, LLaMA
 
 class LLaMAInference:
-    def __init__(self, llama_path, model, device_map="auto"):
+    def __init__(self, llama_path, model, device_map="auto", **kwargs):
 
         state_dict = os.path.join(llama_path, model, "state_dict.pth")
         params_file = os.path.join(llama_path, model, "params.json")
@@ -22,11 +22,13 @@ class LLaMAInference:
         with open(params_file, "r") as f:
             params = json.load(f)
 
-        model_args = ModelArgs(
+        model_args = dict(
             max_seq_len=2048,
             max_batch_size=1,
             **params
         )
+        model_args.update(kwargs)
+        model_args = ModelArgs(**model_args)
 
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
         model_args.vocab_size = self.tokenizer.n_words
