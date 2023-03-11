@@ -2,9 +2,9 @@
 
 > 📢 `vanilla-llama` is a plain-pytorch implementation of `LLaMA` with minimal differences with respect to the original Facebook's implementation. You can run `vanilla-llama` on 1, 2, 4, 8 or 100 GPUs
 
-**🔥Couldn't be more easy to use**
+**Couldn't be more easy to use 🔥**
 
-**🔋Comes with an inference server included**
+**Comes with an inference server included 🔋**
 
 ```python
 from inference import LLaMAInference
@@ -13,14 +13,14 @@ llama = LLaMAInference(llama_path, "65B")
 print(llama.generate(["My name is Federico"]))
 ```
 
-## 🏆 Features
+## Features 🏆
 
 - Easy to use and fine-tune 🔥
 - Uses [🤗 accelerate](https://github.com/huggingface/accelerate) to distribute the model on all available GPUs
 - Comes with batteries included🔋
 - Nice one line loading and generation 😎
 
-## 🤔 Examples 
+## Examples 🤔 
 
 Stop generation on specific tokens (`13` is the new-line token)
 
@@ -40,7 +40,7 @@ Batch generation
 llama.generate(["My name is Federico", "My name is Zuck"])
 ```
 
-## 🌐 Inference server 
+## Inference server 🌐 
 
 Install server requirements
 
@@ -59,7 +59,7 @@ Test it!
 curl -X GET http://localhost:3000/generate -H "Content-Type: application/json" -d '{"prompt": "REST server are very useful becouse"}'
 ```
 
-## ⚙️ Installation 
+## Installation ⚙️ 
 
 Clone this repository
 
@@ -76,7 +76,7 @@ python3 -m venv env
 pip install -r requirements.txt
 ```
 
-## 🏭 Convert LLaMA weights 
+## Convert LLaMA weights 🏭 
 
 To convert LLaMA weights to a plain pytorch state-dict run
 
@@ -84,7 +84,7 @@ To convert LLaMA weights to a plain pytorch state-dict run
 python convert.py --llama-path <ORIGINAL-LLAMA-WEIGHTS> --model <MODEL> --output-path <CONVERTED-WEIGHTS-PATH>
 ```
 
-## ✨ Run example 
+## Run example ✨ 
 
 Run the provided example
 
