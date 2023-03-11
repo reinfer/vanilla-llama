@@ -44,14 +44,16 @@ class LLaMAInference:
             device_map=device_map,
             no_split_module_classes=["TransformerBlock"]
         )
-        
+
         self.generator = LLaMA(self.model, self.tokenizer)
 
-    def generate(self, texts, temperature=0.8, top_p=0.95, max_length=256):
+    def generate(self, texts, temperature=0.8, top_p=0.95, max_length=256, stop_ids=None, stop_words=None):
         results = self.generator.generate(
             texts,
             max_gen_len=max_length,
             temperature=temperature,
-            top_p=top_p
+            top_p=top_p,
+            stop_ids=stop_ids,
+            stop_words=stop_words
         )
         return results
