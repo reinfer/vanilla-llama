@@ -4,6 +4,8 @@
 
 **🔥Couldn't be more easy to use**
 
+**🔋Comes with an inference server included**
+
 ```python
 from inference import LLaMAInference
 
@@ -11,6 +13,32 @@ llama = LLaMAInference(llama_path, "65B")
 print(llama.generate(["My name is Federico"]))
 ```
 
+## Features
+
+- Easy to use and fine-tune 🔥
+- Uses (🤗 accelerate)[https://github.com/huggingface/accelerate] to distribute the model on all available GPUs
+- Comes with batteries included🔋
+- Nice one line loading and generation 😎
+
+## Examples
+
+Stop generation on specific tokens (`13` is the new-line token)
+
+```python
+llama.generate(["Chat:\nHuman: Hi i am an human\nAI:"], stop_ids=[13])
+```
+
+Stop generation on specific texts
+
+```python
+llama.generate(["Question: is the sky blue?\nAnswer:"], stop_words=["Question"])
+```
+
+Batch generation
+
+```python
+llama.generate(["My name is Federico", "My name is Zuck"])
+```
 
 ## Installation
 
