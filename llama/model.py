@@ -217,7 +217,12 @@ class Transformer(nn.Module):
             mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
 
         for layer in self.layers:
+            h = h.to(layer.parameters().__next__().device)
             h = layer(h, start_pos, freqs_cis, mask)
+        h = h.to(self.norm.parameters().__next__().device)
         h = self.norm(h)
-        output = self.output(h[:, -1, :])  # only compute last logits
+
+        hl = h[:, -1, :]
+        hl = hl.to(self.output.parameters().__next__().device)
+        output = self.output(hl)
         return output.float()
