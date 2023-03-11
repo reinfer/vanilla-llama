@@ -15,14 +15,27 @@ class LLaMA:
         self.tokenizer = tokenizer
 
     def _should_stop(self, tokens, prompt_tokens, stop_ids, stop_words):
-
         if stop_ids is not None:
             do_stop = [False for _ in range(len(tokens))]
             for i, (t, p) in enumerate(zip(tokens, prompt_tokens)):
                 g = t[len(p):].tolist()
-                print(g, stop_ids)
                 for stop_id in stop_ids:
                     if stop_id in g:
+                        do_stop[i] = True
+
+            if all(do_stop):
+                return True
+
+        if stop_words is not None:
+            do_stop = [False for _ in range(len(tokens))]
+            for i, (t, p) in enumerate(zip(tokens, prompt_tokens)):
+                t = t.clone()
+                g = t[len(p):]
+                g[g == self.tokenizer.pad_id] = self.tokenizer.eos_id
+                g = g.tolist()
+                d = self.tokenizer.decode(g)
+                for stop_word in stop_words:
+                    if stop_word in d:
                         do_stop[i] = True
 
             if all(do_stop):
