@@ -1,4 +1,4 @@
 torch
-fairscale
-fire
+accelerate
 sentencepiece
+tqdm
