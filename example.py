@@ -45,5 +45,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     llama = LLaMAInference(args.model_path, args.tokenizer_path)
-    llama.generate(["This is a test: "])
+    llama.generate(["My name is Kyle"])
     

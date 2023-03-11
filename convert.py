@@ -47,7 +47,8 @@ class LLaMAInference:
         for i, ckpt in tqdm(enumerate(checkpoints), total=len(checkpoints)):
             checkpoint = torch.load(ckpt, map_location="cpu")
             for parameter_name, parameter in self.model.named_parameters():
-                converted_state_dict[parameter_name] = torch.zeros_like(parameter, device="cpu")
+                if parameter_name not in converted_state_dict:
+                    converted_state_dict[parameter_name] = torch.zeros_like(parameter, device="cpu")
                 short_name = parameter_name.split(".")[-2]
                 if key_to_dim[short_name] is None and i == 0:
                     converted_state_dict[parameter_name] = checkpoint[parameter_name]

@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the GNU General Public License version 3.
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Type
 from dataclasses import dataclass
 import math
 
@@ -20,7 +20,7 @@ class ModelArgs:
     norm_eps: float = 1e-5
 
     max_batch_size: int = 32
-    max_seq_len: int = 2048
+    max_seq_len: int = 1024
 
 
 class RMSNorm(torch.nn.Module):
@@ -89,8 +89,8 @@ class Attention(nn.Module):
             bias=False,
         )
         self.wo = nn.Linear(
-            args.n_heads * self.head_dim,
             args.dim,
+            args.n_heads * self.head_dim,
             bias=False,
         )
 
@@ -101,7 +101,13 @@ class Attention(nn.Module):
             (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
         ).cuda()
 
-    def forward(self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]):
+    def forward(
+        self,
+        x: torch.Tensor,
+        start_pos: int,
+        freqs_cis: torch.Tensor,
+        mask: Optional[torch.Tensor],
+    ):
         bsz, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
@@ -128,9 +134,7 @@ class Attention(nn.Module):
             scores = scores + mask  # (bs, n_local_heads, slen, cache_len + slen)
         scores = F.softmax(scores.float(), dim=-1).type_as(xq)
         output = torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
-        output = output.transpose(
-            1, 2
-        ).contiguous().view(bsz, seqlen, -1)
+        output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
 
         return self.wo(output)
 
@@ -146,14 +150,16 @@ class FeedForward(nn.Module):
         hidden_dim = int(2 * hidden_dim / 3)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = nn.Linear(
-            dim, hidden_dim, bias=False
-        )
+        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(
-            hidden_dim, dim, bias=False
+            hidden_dim,
+            dim,
+            bias=False,
         )
         self.w3 = nn.Linear(
-            dim, hidden_dim, bias=False
+            dim,
+            hidden_dim,
+            bias=False,
         )
 
     def forward(self, x):
@@ -174,10 +180,34 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
-    def forward(self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]):
-        h = x + self.attention.forward(self.attention_norm(x), start_pos, freqs_cis, mask)
+    def forward(
+        self,
+        x: torch.Tensor,
+        start_pos: int,
+        freqs_cis: torch.Tensor,
+        mask: Optional[torch.Tensor],
+    ):
+        h = x + self.attention.forward(
+            self.attention_norm(x), start_pos, freqs_cis, mask
+        )
         out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
+
+
+def convert_linear_to_bnb(float_linear):
+    new_layer = InferenceQuantizedLinear(
+        float_linear.in_features,
+        float_linear.out_features,
+        bias=float_linear.bias is not None,
+    )
+    new_layer._parameters["weight"] = bnb.nn.Int8Params(
+        float_linear.weight.data.cpu(),
+        requires_grad=False,
+        has_fp16_weights=False,
+    )
+    if float_linear.bias is not None:
+        new_layer._parameters["bias"] = float_linear.bias
+    return new_layer
 
 
 class Transformer(nn.Module):
@@ -187,18 +217,15 @@ class Transformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = nn.Embedding(
-            params.vocab_size, params.dim
-        )
+        self.tok_embeddings = torch.nn.Embedding(params.vocab_size, params.dim)
 
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
             self.layers.append(TransformerBlock(layer_id, params))
 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-        self.output = nn.Linear(
-            params.dim, params.vocab_size, bias=False
-        )
+
+        self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
 
         self.freqs_cis = precompute_freqs_cis(
             self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
@@ -213,7 +240,9 @@ class Transformer(nn.Module):
 
         mask = None
         if seqlen > 1:
-            mask = torch.full((1, 1, seqlen, seqlen), float("-inf"), device=tokens.device)
+            mask = torch.full(
+                (1, 1, seqlen, seqlen), float("-inf"), device=tokens.device
+            )
             mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
 
         for layer in self.layers:
