@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Union
 
@@ -21,8 +21,20 @@ def create_app(args):
         stop_words: List[str] = None
         max_length: int = 512
     
+    def verify_token(req: Request):
+        if args.token == "":
+            return True
+        
+        token = req.headers["Authorization"]
+        if token != args.token:
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized"
+            )
+        return True
+
     @app.get("/generate")
-    def generate(gen_args: GenerateRequest):
+    def generate(gen_args: GenerateRequest, authorized: bool = Depends(verify_token)):
         if isinstance(gen_args.prompt, str):
             gen_args.prompt = [gen_args.prompt]
 
@@ -54,6 +66,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, required=True, choices=["7B", "13B", "30B", "65B"])
     parser.add_argument("--max-batch-size", type=int, default=1)
     parser.add_argument("--max-seq-len", type=int, default=2048)
+    parser.add_argument("--token", type=str, default="")
 
     args = parser.parse_args()
 
