@@ -57,6 +57,7 @@ class LLaMA:
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
 
         prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
+        num_input_tokens = [len(t) for t in prompt_tokens]
 
         min_prompt_size = min([len(t) for t in prompt_tokens])
         max_prompt_size = max([len(t) for t in prompt_tokens])
@@ -90,16 +91,18 @@ class LLaMA:
         
         tokens[tokens == self.tokenizer.pad_id] = self.tokenizer.eos_id
         decoded = []
+        num_generated_tokens = []
         for i, t in enumerate(tokens.tolist()):
             # cut to max gen len
             t = t[: len(prompt_tokens[i]) + max_gen_len]
             # cut to eos tok if any
             try:
+                num_generated_tokens.append(t.index(self.tokenizer.eos_id) - len(prompt_tokens[i]))
                 t = t[: t.index(self.tokenizer.eos_id)]
             except ValueError:
-                pass
+                num_generated_tokens.append(max_gen_len)
             decoded.append(self.tokenizer.decode(t))
-        return decoded
+        return decoded, dict(num_input_tokens=num_input_tokens, num_generated_tokens=num_generated_tokens)
 
 
 def sample_top_p(probs, p):

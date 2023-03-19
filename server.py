@@ -41,7 +41,7 @@ def create_app(args):
         if len(gen_args.prompt) > args.max_batch_size:
             return {"error": "Batch size too small"}
 
-        generated = llama.generate(
+        generated, stats = llama.generate(
             gen_args.prompt,
             max_length=gen_args.max_length,
             temperature=gen_args.temperature,
@@ -50,7 +50,7 @@ def create_app(args):
             stop_words=gen_args.stop_words
         )
 
-        return {"generated": generated}
+        return {"generated": generated, "stats": stats}
 
     return app
 

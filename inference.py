@@ -1,4 +1,4 @@
-import argparse
+import time
 import json
 import torch
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
@@ -48,7 +48,8 @@ class LLaMAInference:
         self.generator = LLaMA(self.model, self.tokenizer)
 
     def generate(self, texts, temperature=0.8, top_p=0.95, max_length=256, stop_ids=None, stop_words=None):
-        results = self.generator.generate(
+        start_time = time.time()
+        results, stats = self.generator.generate(
             texts,
             max_gen_len=max_length,
             temperature=temperature,
@@ -56,4 +57,7 @@ class LLaMAInference:
             stop_ids=stop_ids,
             stop_words=stop_words
         )
-        return results
+        end_time = time.time()
+        stats["total_seconds"] = end_time - start_time
+        stats["tok/s"] = max(stats["num_generated_tokens"]) / stats["total_seconds"]
+        return results, stats
