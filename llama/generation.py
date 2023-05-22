@@ -51,6 +51,7 @@ class LLaMA:
         top_p: float = 0.95,
         stop_ids: List[int] = None,
         stop_words: List[str] = None,
+        repetition_penalty: float = 1.0,
     ) -> List[str]:
         bsz = len(prompts)
         params = self.model.params
@@ -72,6 +73,16 @@ class LLaMA:
         prev_pos = 0
         for cur_pos in range(start_pos, total_len):
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            if repetition_penalty != 1.0:
+                logits_new = logits.clone()
+                batch_size = len(tokens)
+                for i in range(batch_size):
+                    for token in set(tokens[i].tolist()):
+                        if logits[i, token] < 0:
+                            logits_new[i, token] = logits[i, token] * repetition_penalty
+                        else:
+                            logits_new[i, token] = logits[i, token] / repetition_penalty
+                logits = logits_new
             if temperature > 0:
                 probs = torch.softmax(logits / temperature, dim=-1)
                 next_token = sample_top_p(probs, top_p)

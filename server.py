@@ -20,6 +20,7 @@ def create_app(args):
         stop_ids: List[int] = None
         stop_words: List[str] = None
         max_length: int = 512
+        repetition_penalty: float = 1.0
     
     def verify_token(req: Request):
         if args.token == "":
@@ -46,6 +47,7 @@ def create_app(args):
             max_length=gen_args.max_length,
             temperature=gen_args.temperature,
             top_p=gen_args.top_p,
+            repetition_penalty=gen_args.repetition_penalty,
             stop_ids=gen_args.stop_ids,
             stop_words=gen_args.stop_words
         )

@@ -47,13 +47,14 @@ class LLaMAInference:
 
         self.generator = LLaMA(self.model, self.tokenizer)
 
-    def generate(self, texts, temperature=0.8, top_p=0.95, max_length=256, stop_ids=None, stop_words=None):
+    def generate(self, texts, temperature=0.8, top_p=0.95, max_length=256, repetition_penalty=1, stop_ids=None, stop_words=None):
         start_time = time.time()
         results, stats = self.generator.generate(
             texts,
             max_gen_len=max_length,
             temperature=temperature,
             top_p=top_p,
+            repetition_penalty=repetition_penalty,
             stop_ids=stop_ids,
             stop_words=stop_words
         )
