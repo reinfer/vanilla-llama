@@ -40,6 +40,11 @@ Batch generation
 llama.generate(["My name is Federico", "My name is Zuck"])
 ```
 
+Repetition Penalty
+```python
+llama.generate(["This is a list of awesome things:\n"], repetition_penalty=(1.0 / 0.85))
+```
+
 ## Inference server 🌐 
 
 Install server requirements
