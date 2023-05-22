@@ -103,3 +103,4 @@ python example.py --llama-path <CONVERTED-WEIGHTS-PATH> --model <MODEL>
 - [llama hf implementation](https://github.com/zphang/transformers/tree/llama_push)
 - [LLaMA: INT8 edition](https://github.com/tloen/llama-int8)
 - [pyllama](https://github.com/juncongmoo/pyllama)
+- [shawwn fork](https://github.com/shawwn/llama)
