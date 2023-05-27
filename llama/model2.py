@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -64,6 +64,41 @@ def apply_rotary_emb(
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
+class Rotary(torch.nn.Module):
+    def __init__(
+        self, dim: int, max_seq_len: int, base: float = 10000.0, device: torch.device | None = None
+    ):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        t = torch.arange(max_seq_len, device=device).type_as(inv_freq)
+        freqs = torch.einsum("i,j->ij", t, inv_freq)
+        emb = freqs[..., None].repeat(1, 1, 2).flatten(1)
+
+        flip_imag = torch.tensor([1, -1])
+        self.register_buffer("flip_imag", flip_imag[None, None, None, None, :], persistent=False)
+        self.flip_imag: Tensor
+
+        self.register_buffer("cos_cached", emb.cos()[None, :, None, :], persistent=False)
+        self.cos_cached: Tensor
+        self.register_buffer("sin_cached", emb.sin()[None, :, None, :], persistent=False)
+        self.sin_cached: Tensor
+
+    def forward(self, x):
+        _, seq_len, _, _ = x.shape
+        cos, sin = self.cos_cached[:, :seq_len], self.sin_cached[:, :seq_len]
+        shifted = (x.view(*x.shape[:-1], -1, 2) * self.flip_imag.to(x.device)).flip(-1).reshape(x.shape)
+        return x * cos + shifted * sin
+
+
+def rotate_half(x):
+    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
+
+
 class Attention(nn.Module):
     def __init__(self, embedding_dim: int, num_heads: int) -> None:
         assert embedding_dim % num_heads == 0, (embedding_dim, num_heads)
@@ -102,6 +137,7 @@ class Attention(nn.Module):
         """
         Inputs
          - x: N x L x D
+         - freqs_cis: L x (D / 2)
 
         Output: N x L x D
 
@@ -110,76 +146,62 @@ class Attention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        xq = self.wq(x).view(batch_size, seq_len, self.num_heads, self.head_dim)
-        xk = self.wk(x).view(batch_size, seq_len, self.num_heads, self.head_dim)
-        xv = self.wv(x).view(batch_size, seq_len, self.num_heads, self.head_dim)
+        q = self.wq(x).view(batch_size, seq_len, self.num_heads, self.head_dim)  # N x L x Nh x Dh
+        k = self.wk(x).view(batch_size, seq_len, self.num_heads, self.head_dim)  # N x L x Nh x Dh
+        v = self.wv(x).view(batch_size, seq_len, self.num_heads, self.head_dim)  # N x L x Nh x Dh
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
-
-        queries, keys, values = xq.transpose(1, 2), xk.transpose(1, 2), xv.transpose(1, 2)
+        q, k = freqs_cis(q), freqs_cis(k)  # N x L x Nh x Dh
+        # q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)  # N x L x Nh x Dh
+        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)  # N x Nh x L x Dh
 
         output = (
-            F.scaled_dot_product_attention(queries, keys, values, is_causal=True) # N x Nh x L x Dh
-            .transpose(1, 2) # N x L x Nh x Dh
-            .contiguous() # N x L x Nh x Dh
-            .view(batch_size, seq_len, -1) # N x L x D
+            F.scaled_dot_product_attention(q, k, v, is_causal=True)  # N x Nh x L x Dh
+            .transpose(1, 2)  # N x L x Nh x Dh
+            .contiguous()  # N x L x Nh x Dh
+            .view(batch_size, seq_len, -1)  # N x L x D
         )
 
-        return self.wo(output) # N x L x D
+        return self.wo(output)  # N x L x D
 
 
 class FeedForward(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        hidden_dim: int,
-        multiple_of: int,
-    ) -> None:
+    def __init__(self, embedding_dim: int, hidden_dim: int, multiple_of: int) -> None:
         super().__init__()
+
         hidden_dim = int(2 * hidden_dim / 3)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
-        self.w2 = nn.Linear(
-            hidden_dim,
-            dim,
-            bias=False,
-        )
-        self.w3 = nn.Linear(
-            dim,
-            hidden_dim,
-            bias=False,
-        )
+        self.w1 = nn.Linear(embedding_dim, hidden_dim, bias=False)
+        self.w2 = nn.Linear(hidden_dim, embedding_dim, bias=False)
+        self.w3 = nn.Linear(embedding_dim, hidden_dim, bias=False)
 
     def forward(self, x: Tensor) -> Tensor:
         """
-        Input:
-          x: N x
+        Input: N x L x D
+        Output: N x L x D
 
-        Output:
-
+        Dimensions:
+         - N, L, D := batch_size, sequence_length, embedding_dim
         """
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, layer_id: int, args: ModelArgs):
+    def __init__(
+        self, embedding_dim: int, num_heads: int, multiple_of: int, norm_eps: float
+    ) -> None:
         super().__init__()
 
-        self.n_heads = args.n_heads
-        self.dim = args.dim
-        self.head_dim = args.dim // args.n_heads
-        self.attention = Attention(embedding_dim=args.dim, num_heads=args.n_heads)
+        self.attention = Attention(embedding_dim=embedding_dim, num_heads=num_heads)
         self.feed_forward = FeedForward(
-            dim=args.dim, hidden_dim=4 * args.dim, multiple_of=args.multiple_of
+            embedding_dim=embedding_dim, hidden_dim=4 * embedding_dim, multiple_of=multiple_of
         )
-        self.layer_id = layer_id
-        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.attention_norm = RMSNorm(embedding_dim, eps=norm_eps)
+        self.ffn_norm = RMSNorm(embedding_dim, eps=norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor):
-        h = x + self.attention.forward(self.attention_norm(x), freqs_cis)
-        out = h + self.feed_forward.forward(self.ffn_norm(h))
+    def forward(self, x: Tensor, freqs_cis: Tensor) -> Tensor:
+        out = x + self.attention(self.attention_norm(x), freqs_cis)
+        out = out + self.feed_forward(self.ffn_norm(out))
         return out
 
 
@@ -190,30 +212,41 @@ class Transformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = torch.nn.Embedding(params.vocab_size, params.dim)
+        self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
 
-        self.layers = torch.nn.ModuleList()
-        for layer_id in range(params.n_layers):
-            self.layers.append(TransformerBlock(layer_id, params))
+        self.layers = nn.ModuleList()
+        for _ in range(params.n_layers):
+            self.layers.append(
+                TransformerBlock(
+                    embedding_dim=params.dim,
+                    num_heads=params.n_heads,
+                    multiple_of=params.multiple_of,
+                    norm_eps=params.norm_eps,
+                )
+            )
 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-
         self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
 
-        self.freqs_cis = precompute_freqs_cis(
-            self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
+        # self.freqs_cis = precompute_freqs_cis(
+        #     self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
+        # )
+        self.rotary = Rotary(
+            dim=self.params.dim // self.params.n_heads, max_seq_len=self.params.max_seq_len
         )
+        self.forwardc = None
 
-    @torch.inference_mode()
-    def forward(self, tokens: torch.Tensor, start_pos: int):
-        _batch_size, seq_len = tokens.shape
+    @torch.no_grad()
+    def forward2(self, tokens: Tensor, start_pos: int) -> Tensor:
+        _, seq_len = tokens.shape
         h = self.tok_embeddings(tokens)
-        self.freqs_cis = self.freqs_cis.to(h.device)
-        freqs_cis = self.freqs_cis[start_pos : start_pos + seq_len]
+        self.rotary = self.rotary.to(h.device)
+        # self.freqs_cis = self.freqs_cis.to(h.device)
+        # freqs_cis = self.freqs_cis[start_pos : start_pos + seq_len]
 
         for layer in self.layers:
             h = h.to(layer.parameters().__next__().device)
-            h = layer(h, freqs_cis)
+            h = layer(h, self.rotary)
         h = h.to(self.norm.parameters().__next__().device)
         h = self.norm(h)
 
@@ -223,3 +256,9 @@ class Transformer(nn.Module):
         hl = hl.to(self.output.parameters().__next__().device)
         output = self.output(hl)
         return output.float()
+
+    # @torch.inference_mode()
+    def forward(self, tokens: Tensor, start_pos: int) -> Tensor:
+        if self.forwardc is None:
+            self.forwardc = torch.compile(self.forward2)
+        return self.forwardc(tokens, start_pos)
