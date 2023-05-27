@@ -85,7 +85,7 @@ class Rotary(torch.nn.Module):
 
     def forward(self, x):
         _, seq_len, _, _ = x.shape
-        cos, sin = self.cos_cached[:, :seq_len], self.sin_cached[:, :seq_len]
+        cos, sin = self.cos_cached[:, :seq_len].to(x.device), self.sin_cached[:, :seq_len].to(x.device)
         shifted = (x.view(*x.shape[:-1], -1, 2) * self.flip_imag.to(x.device)).flip(-1).reshape(x.shape)
         return x * cos + shifted * sin
 
@@ -259,6 +259,6 @@ class Transformer(nn.Module):
 
     # @torch.inference_mode()
     def forward(self, tokens: Tensor, start_pos: int) -> Tensor:
-        if self.forwardc is None:
-            self.forwardc = torch.compile(self.forward2)
-        return self.forwardc(tokens, start_pos)
+        # if self.forwardc is None:
+        #     self.forwardc = torch.compile(self.forward2)
+        return self.forward2(tokens, start_pos)
