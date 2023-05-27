@@ -1,7 +1,14 @@
 [tool.pdm]
 [tool.pdm.dev-dependencies]
 dev = [
+    "PyQt5>=5.15.9",
+    "autoflake>=2.0.1",
+    "black>=23.1.0",
+    "flake8>=6.0.0",
+    "ipdb>=0.13.13",
     "ipython>=8.13.2",
+    "isort>=5.12.0",
+    "matplotlib>=3.7.1",
 ]
 
 [project]
@@ -23,3 +30,31 @@ license = {text = "MIT"}
 [build-system]
 requires = ["pdm-pep517>=1.0.0"]
 build-backend = "pdm.pep517.api"
+
+[tool.pdm.scripts]
+check = {shell = """
+    flake8 llama
+    isort --check --diff llama
+    black --target-version py310 --check llama
+    pyright llama
+"""}
+fmt = {shell = """
+    autoflake -i -r llama
+    isort llama
+    black --target-version py310 llama
+"""}
+
+[tool.black]
+line-length = 100
+target_version = ["py38"]
+include = '\.pyi?$'
+exclude = '(.*_pb2\.pyi?|.git|.hypothesis|.mypy_cache|.pytest_cache|.tox|.venv|_build|build|dist|node_modules)'
+
+[tool.isort]
+known_third_party = []
+known_first_party = ["llama"]
+multi_line_output = 3
+include_trailing_comma = true
+use_parentheses = true
+ignore_whitespace = true
+float_to_top = true

@@ -5,8 +5,8 @@ from typing import List
 
 import torch
 
-from llama.tokenizer import Tokenizer
 from llama.model import Transformer
+from llama.tokenizer import Tokenizer
 
 
 class LLaMA:
@@ -18,7 +18,7 @@ class LLaMA:
         if stop_ids is not None:
             do_stop = [False for _ in range(len(tokens))]
             for i, (t, p) in enumerate(zip(tokens, prompt_tokens)):
-                g = t[len(p):].tolist()
+                g = t[len(p) :].tolist()
                 for stop_id in stop_ids:
                     if stop_id in g:
                         do_stop[i] = True
@@ -30,7 +30,7 @@ class LLaMA:
             do_stop = [False for _ in range(len(tokens))]
             for i, (t, p) in enumerate(zip(tokens, prompt_tokens)):
                 t = t.clone()
-                g = t[len(p):]
+                g = t[len(p) :]
                 g[g == self.tokenizer.pad_id] = self.tokenizer.eos_id
                 g = g.tolist()
                 d = self.tokenizer.decode(g)
@@ -90,16 +90,14 @@ class LLaMA:
                 next_token = torch.argmax(logits, dim=-1)
             next_token = next_token.reshape(-1)
             # only replace token if prompt has already been generated
-            next_token = torch.where(
-                input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
-            )
+            next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
 
             tokens[:, cur_pos] = next_token
             prev_pos = cur_pos
 
             if self._should_stop(tokens, prompt_tokens, stop_ids, stop_words):
                 break
-        
+
         tokens[tokens == self.tokenizer.pad_id] = self.tokenizer.eos_id
         decoded = []
         num_generated_tokens = []
@@ -113,7 +111,9 @@ class LLaMA:
             except ValueError:
                 num_generated_tokens.append(max_gen_len)
             decoded.append(self.tokenizer.decode(t))
-        return decoded, dict(num_input_tokens=num_input_tokens, num_generated_tokens=num_generated_tokens)
+        return decoded, dict(
+            num_input_tokens=num_input_tokens, num_generated_tokens=num_generated_tokens
+        )
 
 
 def sample_top_p(probs, p):
