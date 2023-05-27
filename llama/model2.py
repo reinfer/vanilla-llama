@@ -263,13 +263,13 @@ class Transformer(nn.Module):
 
         _, seq_len = tokens.shape
         h = self.tok_embeddings(tokens)
-        self.rotary = self.rotary.to(h.device)
-        # self.freqs_cis = self.freqs_cis.to(h.device)
-        # freqs_cis = self.freqs_cis[start_pos : start_pos + seq_len]
+        # self.rotary = self.rotary.to(h.device)
+        self.freqs_cis = self.freqs_cis.to(h.device)
+        freqs_cis = self.freqs_cis[: seq_len]
 
         for layer in self.layers:
             h = h.to(layer.parameters().__next__().device)
-            h = layer(h, self.rotary)
+            h = layer(h, freqs_cis)
         h = h.to(self.norm.parameters().__next__().device)
         h = self.norm(h)
 
