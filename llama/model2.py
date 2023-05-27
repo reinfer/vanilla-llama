@@ -150,8 +150,8 @@ class Attention(nn.Module):
         k = self.wk(x).view(batch_size, seq_len, self.num_heads, self.head_dim)  # N x L x Nh x Dh
         v = self.wv(x).view(batch_size, seq_len, self.num_heads, self.head_dim)  # N x L x Nh x Dh
 
-        q, k = freqs_cis(q), freqs_cis(k)  # N x L x Nh x Dh
-        # q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)  # N x L x Nh x Dh
+        # q, k = freqs_cis(q), freqs_cis(k)  # N x L x Nh x Dh
+        q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)  # N x L x Nh x Dh
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)  # N x Nh x L x Dh
 
         output = (
@@ -228,16 +228,39 @@ class Transformer(nn.Module):
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
         self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
 
-        # self.freqs_cis = precompute_freqs_cis(
-        #     self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
-        # )
-        self.rotary = Rotary(
-            dim=self.params.dim // self.params.n_heads, max_seq_len=self.params.max_seq_len
+        self.freqs_cis = precompute_freqs_cis(
+            self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
         )
-        self.forwardc = None
+        # self.rotary = Rotary(
+        #     dim=self.params.dim // self.params.n_heads, max_seq_len=self.params.max_seq_len
+        # )
+        # self.forwardc = None
 
-    @torch.no_grad()
-    def forward2(self, tokens: Tensor, start_pos: int) -> Tensor:
+    @torch.inference_mode()
+    def forward(self, tokens: Tensor, start_pos: int) -> Tensor:
+        _, seq_len = tokens.shape
+        h = self.tok_embeddings(tokens)
+        # self.rotary = self.rotary.to(h.device)
+        self.freqs_cis = self.freqs_cis.to(h.device)
+        freqs_cis = self.freqs_cis[start_pos : start_pos + seq_len]
+
+        for layer in self.layers:
+            h = h.to(layer.parameters().__next__().device)
+            h = layer(h, freqs_cis)
+        h = h.to(self.norm.parameters().__next__().device)
+        h = self.norm(h)
+
+        hl = h[:, -1, :]
+        # hl = h
+
+        hl = hl.to(self.output.parameters().__next__().device)
+        output = self.output(hl)
+        return output.float()
+
+    def forward2(self, tokens: Tensor, targets: Tensor | None = None) -> Tensor:
+        # tokens: N x L x D
+        # targets: N x L
+
         _, seq_len = tokens.shape
         h = self.tok_embeddings(tokens)
         self.rotary = self.rotary.to(h.device)
@@ -258,7 +281,7 @@ class Transformer(nn.Module):
         return output.float()
 
     # @torch.inference_mode()
-    def forward(self, tokens: Tensor, start_pos: int) -> Tensor:
-        # if self.forwardc is None:
-        #     self.forwardc = torch.compile(self.forward2)
-        return self.forward2(tokens, start_pos)
+    # def forward(self, tokens: Tensor, start_pos: int) -> Tensor:
+    #     # if self.forwardc is None:
+    #     #     self.forwardc = torch.compile(self.forward2)
+    #     return self.forward2(tokens, start_pos)
