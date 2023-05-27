@@ -93,7 +93,7 @@ class LLaMA:
             next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
 
             tokens[:, cur_pos] = next_token
-            prev_pos = cur_pos
+            # prev_pos = cur_pos
 
             if self._should_stop(tokens, prompt_tokens, stop_ids, stop_words):
                 break
