@@ -155,7 +155,7 @@ class Attention(nn.Module):
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)  # N x Nh x L x Dh
 
         output = (
-            F.scaled_dot_product_attention(q, k, v, is_causal=True)  # N x Nh x L x Dh
+            F.scaled_dot_product_attention(q, k.to(q.device), v.to(q.device), is_causal=True)  # N x Nh x L x Dh
             .transpose(1, 2)  # N x L x Nh x Dh
             .contiguous()  # N x L x Nh x Dh
             .view(batch_size, seq_len, -1)  # N x L x D
