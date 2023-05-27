@@ -87,7 +87,7 @@ class Rotary(torch.nn.Module):
         _, seq_len, _, _ = x.shape
         cos, sin = self.cos_cached[:, :seq_len].to(x.device), self.sin_cached[:, :seq_len].to(x.device)
         shifted = (x.view(*x.shape[:-1], -1, 2) * self.flip_imag.to(x.device)).flip(-1).reshape(x.shape)
-        return x * cos + shifted * sin
+        return (x.float() * cos + shifted.float() * sin).type_as(x)
 
 
 def rotate_half(x):
