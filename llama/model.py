@@ -247,8 +247,8 @@ class Transformer(nn.Module):
         h = h.to(self.norm.parameters().__next__().device)
         h = self.norm(h)
 
-        # hl = h[:, -1, :]
-        hl = h
+        hl = h[:, -1, :]
+        # hl = h
 
         hl = hl.to(self.output.parameters().__next__().device)
         output = self.output(hl)

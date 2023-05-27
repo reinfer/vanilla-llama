@@ -5,10 +5,10 @@ from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from tqdm import tqdm
 from pathlib import Path
 import os
-from llama import ModelArgs, Tokenizer, Transformer, LLaMA
+from llama import ModelArgs, Tokenizer, LLaMA
 
 class LLaMAInference:
-    def __init__(self, llama_path, model, device_map="auto", **kwargs):
+    def __init__(self, llama_path, model, model_type, device_map="auto", **kwargs):
 
         state_dict = os.path.join(llama_path, model, "state_dict.pth")
         params_file = os.path.join(llama_path, model, "params.json")
@@ -35,7 +35,7 @@ class LLaMAInference:
 
         with init_empty_weights():
             torch.set_default_tensor_type(torch.HalfTensor)
-            model = Transformer(model_args)
+            model = model_type(model_args)
         torch.set_default_tensor_type(torch.FloatTensor)
 
         self.model = load_checkpoint_and_dispatch(
