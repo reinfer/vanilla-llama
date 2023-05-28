@@ -257,7 +257,7 @@ class Transformer(nn.Module):
         output = self.output(hl)
         return output.float()
 
-    def forward2(self, tokens: Tensor, targets: Tensor | None = None) -> Tensor:
+    def forward2(self, tokens: Tensor) -> tuple[Tensor, Tensor]:
         # tokens: N x L x D
         # targets: N x L
 
@@ -273,15 +273,20 @@ class Transformer(nn.Module):
         h = h.to(self.norm.parameters().__next__().device)
         h = self.norm(h)
 
-        hl = h[:, -1, :]
-        # hl = h
+        h = h.to(self.output.parameters().__next__().device)
+        logits = self.output(h)
 
-        hl = hl.to(self.output.parameters().__next__().device)
-        output = self.output(hl)
-        return output.float()
+        loss = F.cross_entropy(
+            logits[:, :-1, :].flatten(end_dim=1),
+            tokens.to(logits.device)[:, 1:].flatten(),
+            ignore_index=PAD_TOKEN_INDEX,
+            reduction="mean",
+        )
 
-    # @torch.inference_mode()
-    # def forward(self, tokens: Tensor, start_pos: int) -> Tensor:
-    #     # if self.forwardc is None:
-    #     #     self.forwardc = torch.compile(self.forward2)
-    #     return self.forward2(tokens, start_pos)
+        return logits.float(), loss
+
+
+# Setting the pad token to the unk token as llama doesn't have one
+# (sentencepiece tokenizer returns -1)
+# Also see https://github.com/huggingface/transformers/issues/22520
+PAD_TOKEN_INDEX = 0
